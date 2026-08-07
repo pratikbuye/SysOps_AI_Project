@@ -4,3 +4,4 @@ psutil
 pypdf
 requests
 openpyxl
+groq
