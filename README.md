@@ -32,18 +32,20 @@ Open your terminal and run:
 ```bash
 ollama run qwen2:0.5b
 
-3. Install Dependencies
+### 3. Install Dependencies
 Clone or download this repository, navigate to the folder, and install required libraries:
 
+```bash
 pip install -r requirements.txt
 
-4. Run the Application
+### 4. Run the Application
 Start the Streamlit app with:
 
+```bash
 streamlit run app.py
 
 
-Project Structure :
+### Project Structure :
 
 ├── app.py              # Main Streamlit Application
 ├── sysops.db           # SQLite Database (Auto-generated)
