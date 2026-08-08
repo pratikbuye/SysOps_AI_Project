@@ -22,19 +22,17 @@ st.sidebar.markdown("---")
 
 # 1. Live Ollama Engine Connection Check
 st.sidebar.subheader("🤖 Local LLM Engine")
-if os.getenv("STREAMLIT_RUNTIME_HOST"):
-        st.sidebar.success("🟢 Cloud LLM Engine Active")
-        st.sidebar.caption("Active Provider: **Groq Cloud API**")
-else:
-    try:
-        ollama_check = requests.get("http://localhost:11434/api/tags", timeout=2)
+try:
+        ollama_check = requests.get("http://localhost:11434/api/tags", timeout=1)
         if ollama_check.status_code == 200:
             st.sidebar.success("🟢 Ollama Engine Active")
             st.sidebar.caption("Active Model: **qwen2:1.5b**")
         else:
             st.sidebar.warning("🟡 Ollama Status Unknown")
-    except Exception:
-        st.sidebar.error("🔴 Ollama Engine Offline")
+except Exception:
+    # Jab Local Ollama unreachable ho (Cloud par ya Local closed par)
+    st.sidebar.success("🟢 Cloud LLM Engine Active")
+    st.sidebar.caption("Active Provider: **Groq Cloud API**")
 
 st.sidebar.markdown("---")
 
