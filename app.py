@@ -4,8 +4,10 @@ import requests
 import pandas as pd
 import sqlite3
 import re
+import os
 from datetime import datetime
 from pypdf import PdfReader
+from groq import Groq
 
 # Page Configuration
 st.set_page_config(page_title="Autonomous SysOps AI Agent", layout="wide")
@@ -49,6 +51,7 @@ st.sidebar.markdown("---")
 # 3. Quick Rerun / Refresh Action
 if st.sidebar.button("🔄 Refresh App Status", use_container_width=True):
     st.rerun()
+
 # ================= DATABASE SETUP =================
 DB_FILE = "sysops.db"
 
@@ -109,7 +112,7 @@ with tab1:
     # Auto-log live metrics to DB
     log_hardware_data(cpu_usage, ram_info.percent, disk_info.percent, status)
 
-    # 1. ⚠️ THRESHOLD ALERT SYSTEM
+    # 1. THRESHOLD ALERT SYSTEM
     if cpu_usage > 80 or ram_info.percent > 85:
         st.error("⚠️ **CRITICAL ALERT:** High Resource Utilization Detected! Check high-volume processes.")
     elif cpu_usage > 60 or ram_info.percent > 70:
@@ -129,7 +132,7 @@ with tab1:
 
     st.caption(f"✅ Current metrics auto-logged to `sysops.db` at {datetime.now().strftime('%H:%M:%S')}")
 
-    # 2. 📈 LIVE TREND CHART (Past 15 Logs)
+    # 2. LIVE TREND CHART (Past 15 Logs)
     st.markdown("---")
     st.subheader("📈 Resource Usage History Trend")
     try:
@@ -138,7 +141,7 @@ with tab1:
         conn.close()
 
         if not df_chart.empty:
-            df_chart = df_chart.iloc[::-1]  # Chronological order mein arrange karne ke liye
+            df_chart = df_chart.iloc[::-1]  # Chronological order
             df_chart.set_index('timestamp', inplace=True)
             st.line_chart(df_chart)
     except Exception as e:
@@ -165,17 +168,34 @@ User Question: {user_query}
 Answer:"""
 
             try:
+                # 1. Local Ollama Fallback
                 res = requests.post(
                     "http://localhost:11434/api/generate",
                     json={"model": "qwen2:1.5b", "prompt": prompt, "stream": False},
-                    timeout=15
+                    timeout=60
                 )
                 if res.status_code == 200:
                     st.info(res.json().get("response", "").strip())
                 else:
-                    st.error("Ollama connection failed.")
-            except Exception as e:
-                st.error(f"Error reaching Ollama: {e}")
+                    raise Exception("Ollama failed")
+            except Exception:
+                # 2. Cloud Groq Fallback
+                try:
+                    groq_api_key = st.secrets["GROQ_API_KEY"]
+                except Exception:
+                    groq_api_key = os.getenv("GROQ_API_KEY")
+                if groq_api_key:
+                    try:
+                        client = Groq(api_key=groq_api_key)
+                        completion = client.chat.completions.create(
+                            model="llama-3.1-8b-instant",
+                            messages=[{"role": "user", "content": prompt}],
+                        )
+                        st.info(completion.choices[0].message.content.strip())
+                    except Exception as groq_err:
+                        st.error(f"Groq API Error: {groq_err}")
+                else:
+                    st.error("Neither Ollama nor Groq API is available.")
 
     with st.expander("📁 View Raw Database Logs (sysops.db)"):
         conn = sqlite3.connect(DB_FILE)
@@ -192,6 +212,7 @@ with tab2:
 
     if uploaded_file is not None:
         file_extension = uploaded_file.name.split('.')[-1].lower()
+        is_resume = False  # Pre-declare to avoid NameError
 
         # ---------------- 1. SMART PDF DOCUMENT & RESUME ANALYZER ----------------
         if file_extension == "pdf":
@@ -220,15 +241,34 @@ Provide a clean review with:
 1. Overall Rating (out of 10)
 2. Key Strengths
 3. Key Improvements Needed"""
-                        
+
                         try:
-                            res = requests.post("http://localhost:11434/api/generate", 
-                                                json={"model": "qwen2:1.5b", "prompt": prompt, "stream": False})
+                            res = requests.post("http://localhost:11434/api/generate",
+                                                json={"model": "qwen2:1.5b", "prompt": prompt, "stream": False},
+                                                timeout=60)
                             if res.status_code == 200:
-                                st.subheader("📊 Auto AI Resume Assessment")
+                                st.subheader("📄 Auto AI Resume Assessment")
                                 st.success(res.json().get("response", ""))
-                        except Exception as e:
-                            st.error(f"Error: {e}")
+                            else:
+                                raise Exception("Ollama failed")
+                        except Exception:
+                            try:
+                                groq_api_key = st.secrets["GROQ_API_KEY"]
+                            except Exception:
+                                groq_api_key = os.getenv("GROQ_API_KEY")
+                            if groq_api_key:
+                                try:
+                                    client = Groq(api_key=groq_api_key)
+                                    completion = client.chat.completions.create(
+                                        model="llama-3.1-8b-instant",
+                                        messages=[{"role": "user", "content": prompt}],
+                                    )
+                                    st.subheader("📄 Auto AI Resume Assessment")
+                                    st.success(completion.choices[0].message.content)
+                                except Exception as groq_err:
+                                    st.error(f"Groq API Error: {groq_err}")
+                            else:
+                                st.error("Neither Ollama nor Groq API is available.")
             else:
                 st.success("📑 General Document PDF Loaded!")
 
@@ -251,9 +291,9 @@ Instructions:
 Answer accurately based ONLY on the provided document text. Be clear and direct."""
 
                     try:
-                        res = requests.post("http://localhost:11434/api/generate", 
+                        res = requests.post("http://localhost:11434/api/generate",
                                             json={"model": "qwen2:1.5b", "prompt": prompt, "stream": False},
-                                            timeout=25)
+                                            timeout=60)
                         if res.status_code == 200:
                             ai_ans = res.json().get("response", "").strip()
                             st.subheader("💡 AI Answer")
@@ -265,11 +305,37 @@ Answer accurately based ONLY on the provided document text. Be clear and direct.
                                 file_name="pdf_analysis_report.txt",
                                 mime="text/plain"
                             )
-                    except Exception as e:
-                        st.error(f"Error connecting to Ollama: {e}")
+                        else:
+                            raise Exception("Ollama failed")
+                    except Exception:
+                        try:
+                            groq_api_key = st.secrets["GROQ_API_KEY"]
+                        except Exception:
+                            groq_api_key = os.getenv("GROQ_API_KEY")
+                        if groq_api_key:
+                            try:
+                                client = Groq(api_key=groq_api_key)
+                                completion = client.chat.completions.create(
+                                    model="llama-3.1-8b-instant",
+                                    messages=[{"role": "user", "content": prompt}],
+                                )
+                                ai_ans = completion.choices[0].message.content.strip()
+                                st.subheader("💡 AI Answer")
+                                st.success(ai_ans)
 
-# ---------------- 2. SMART CSV / XLSX DATASET ANALYZER ----------------
-        if file_extension in ["csv", "xlsx"]:
+                                st.download_button(
+                                    label="📥 Download Detailed Analysis (.txt)",
+                                    data=f"Query: {doc_query}\n\nAI Answer:\n{ai_ans}",
+                                    file_name="pdf_analysis_report.txt",
+                                    mime="text/plain"
+                                )
+                            except Exception as groq_err:
+                                st.error(f"Groq API Error: {groq_err}")
+                        else:
+                            st.error("Neither Ollama nor Groq API is available.")
+
+        # ---------------- 2. SMART CSV / XLSX DATASET ANALYZER ----------------
+        elif file_extension in ["csv", "xlsx"]:
             st.success("📊 Data File Successfully Loaded!")
             df = pd.read_csv(uploaded_file) if file_extension == "csv" else pd.read_excel(uploaded_file)
             
@@ -356,11 +422,11 @@ INSTRUCTIONS:
                         res = requests.post(
                             "http://localhost:11434/api/generate",
                             json={"model": "qwen2:1.5b", "prompt": prompt, "stream": False},
-                            timeout=25
+                            timeout=60
                         )
                         if res.status_code == 200:
                             ai_report = res.json().get("response", "").strip()
-                            
+
                             st.subheader("💡 AI Answer")
                             st.success(ai_report)
 
@@ -374,5 +440,36 @@ INSTRUCTIONS:
                                 file_name="data_analysis_report.txt",
                                 mime="text/plain"
                             )
-                    except Exception as e:
-                        st.error(f"Error connecting to Ollama: {e}")
+                        else:
+                            raise Exception("Ollama failed")
+                    except Exception:
+                        try:
+                            groq_api_key = st.secrets["GROQ_API_KEY"]
+                        except Exception:
+                            groq_api_key = os.getenv("GROQ_API_KEY")
+                        if groq_api_key:
+                            try:
+                                client = Groq(api_key=groq_api_key)
+                                completion = client.chat.completions.create(
+                                    model="llama-3.1-8b-instant",
+                                    messages=[{"role": "user", "content": prompt}],
+                                )
+                                ai_report = completion.choices[0].message.content.strip()
+
+                                st.subheader("💡 AI Answer")
+                                st.success(ai_report)
+
+                                if not matched_df.empty:
+                                    st.markdown("##### 📌 Exact Matched Records:")
+                                    st.dataframe(matched_df, use_container_width=True)
+
+                                st.download_button(
+                                    label="📥 Download Detailed Analysis (.txt)",
+                                    data=f"Query: {doc_query}\n\nAI Answer:\n{ai_report}\n\nMatched Records:\n{matched_df.to_string()}",
+                                    file_name="data_analysis_report.txt",
+                                    mime="text/plain"
+                                )
+                            except Exception as groq_err:
+                                st.error(f"Groq API Error: {groq_err}")
+                        else:
+                            st.error("Neither Ollama nor Groq API is available.")
