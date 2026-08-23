@@ -190,7 +190,7 @@ Answer:"""
                     try:
                         client = Groq(api_key=groq_api_key)
                         completion = client.chat.completions.create(
-                            model="llama-3.3-70b-versatile",
+                            model="llama3-8b-8192",
                             messages=[{"role": "user", "content": prompt}],
                         )
                         st.info(completion.choices[0].message.content.strip())
@@ -262,7 +262,7 @@ Provide a clean review with:
                                 try:
                                     client = Groq(api_key=groq_api_key)
                                     completion = client.chat.completions.create(
-                                        model="llama-3.3-70b-versatile",
+                                        model="llama3-8b-8192",
                                         messages=[{"role": "user", "content": prompt}],
                                     )
                                     st.subheader("📄 Auto AI Resume Assessment")
@@ -318,7 +318,7 @@ Answer accurately based ONLY on the provided document text. Be clear and direct.
                             try:
                                 client = Groq(api_key=groq_api_key)
                                 completion = client.chat.completions.create(
-                                    model="llama-3.3-70b-versatile",
+                                    model="llama3-8b-8192",
                                     messages=[{"role": "user", "content": prompt}],
                                 )
                                 ai_ans = completion.choices[0].message.content.strip()
@@ -453,7 +453,7 @@ INSTRUCTIONS:
                             try:
                                 client = Groq(api_key=groq_api_key)
                                 completion = client.chat.completions.create(
-                                    model="llama-3.3-70b-versatile",
+                                    model="llama3-8b-8192",
                                     messages=[{"role": "user", "content": prompt}],
                                 )
                                 ai_report = completion.choices[0].message.content.strip()
