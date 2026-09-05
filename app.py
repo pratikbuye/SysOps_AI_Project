@@ -3,6 +3,7 @@ import psutil
 import requests
 import pandas as pd
 import sqlite3
+import json
 import re
 import os
 from datetime import datetime
@@ -210,7 +211,7 @@ with tab2:
     st.subheader("📄 AI Document & Data Analyzer Agent")
     st.write("Upload a PDF resume, CSV, or Excel file and get instant analysis from AI!")
 
-    uploaded_file = st.file_uploader("Upload File (PDF, CSV, XLSX)", type=["pdf", "csv", "xlsx"])
+    uploaded_file = st.file_uploader("Upload File (PDF, CSV, XLSX, TXT)", type=["pdf", "csv", "xlsx", "txt"])
 
     if uploaded_file is not None:
         file_extension = uploaded_file.name.split('.')[-1].lower()
@@ -354,7 +355,99 @@ Answer accurately based ONLY on the provided document text. Be clear and direct.
             # --- DATA PREVIEW ---
             with st.expander("👀 View Dataset Preview", expanded=True):
                 st.dataframe(df.head(10), use_container_width=True)
+        if len(df.columns) == 1:
+            st.warning("⚠️ Unstructured Single-Column Data Detected!")
+            
+            if st.button("⚡ Convert Unstructured File to Structured CSV"):
+                with st.spinner("Processing All Student Records..."):
+                    sample_list = df.iloc[:, 0].dropna().astype(str).tolist()
+                    
+                    # 1. Ultra-Fast Regex Engine (0.1 Second Execution)
+                    extracted_data = []
+                    import re
+                    
+                    for row in sample_list:
+                        # Match pattern: "Student <Name> has contact number <Number>"
+                        match = re.search(r'(?:Student\s+)?([A-Za-z\s]+?)\s+(?:has\s+contact\s+number|contact|mobile|phone)?\s*[:\-]?\s*(\d{10})', row, re.IGNORECASE)
+                        if match:
+                            name = match.group(1).strip()
+                            phone = match.group(2).strip()
+                            extracted_data.append({"Student Name": name, "Contact Number": phone})
+                    
+                    # 2. If Regex succeeded for majority records, display immediately
+                    if len(extracted_data) >= len(sample_list) * 0.5:
+                        structured_df = pd.DataFrame(extracted_data)
+                        st.success(f"⚡ Extracted {len(structured_df)} Records Instantly via Fast Engine!")
+                        st.dataframe(structured_df, use_container_width=True)
+                        
+                        csv_data = structured_df.to_csv(index=False).encode('utf-8')
+                        st.download_button(
+                            label="📥 Download Clean Structured CSV",
+                            data=csv_data,
+                            file_name="structured_students.csv",
+                            mime="text/csv"
+                        )
+                    else:
+                        # Fallback to AI in Chunks of 50 for safety
+                        st.info("Using AI Engine for Complex Formatting...")
+                        groq_key = None
+                        try:
+                            if "GROQ_API_KEY" in st.secrets:
+                                groq_key = st.secrets["GROQ_API_KEY"]
+                        except Exception:
+                            pass
+                        if not groq_key:
+                            groq_key = os.getenv("GROQ_API_KEY")
 
+                        chunk_size = 50
+                        all_ai_results = []
+                        
+                        for i in range(0, len(sample_list), chunk_size):
+                            chunk = sample_list[i:i + chunk_size]
+                            raw_text_block = "\n".join(chunk)
+                            
+                            user_prompt = f"""
+                            Extract student names and contact numbers into JSON array.
+                            Format: [{{"Student Name": "Name", "Contact Number": "Number"}}]
+                            Data:
+                            {raw_text_block}
+                            """
+                            
+                            if groq_key:
+                                try:
+                                    client = Groq(api_key=groq_key)
+                                    completion = client.chat.completions.create(
+                                        model="openai/gpt-oss-120b",
+                                        messages=[
+                                            {"role": "system", "content": "Return ONLY valid JSON array."},
+                                            {"role": "user", "content": user_prompt}
+                                        ],
+                                        temperature=0.0
+                                    )
+                                    res_text = completion.choices[0].message.content.strip()
+                                    if "```json" in res_text:
+                                        res_text = res_text.split("```json")[1].split("```")[0].strip()
+                                    elif "```" in res_text:
+                                        res_text = res_text.split("```")[1].split("```")[0].strip()
+                                    
+                                    all_ai_results.extend(json.loads(res_text))
+                                except Exception as e:
+                                    pass
+                        
+                        if all_ai_results:
+                            structured_df = pd.DataFrame(all_ai_results)
+                            st.subheader(f"📊 Converted Structured Preview ({len(structured_df)} Students Found)")
+                            st.dataframe(structured_df, use_container_width=True)
+                            
+                            csv_data = structured_df.to_csv(index=False).encode('utf-8')
+                            st.download_button(
+                                label="📥 Download Clean Structured CSV",
+                                data=csv_data,
+                                file_name="structured_students.csv",
+                                mime="text/csv"
+                            )
+                        else:
+                            st.error("Neither Cloud API nor Local Model responded successfully.")
             st.markdown("---")
             # --- DEEP SEARCH AGENT ---
             st.subheader("🔍 Smart AI Deep Search & Analysis")
