@@ -404,7 +404,7 @@ Answer accurately based ONLY on the provided document text. Be clear and direct.
             # --- DATA PREVIEW ---
             with st.expander("👀 View Dataset Preview", expanded=True):
                 st.dataframe(df.head(10), use_container_width=True)
-        if len(df.columns) == 1:
+        if 'df' in locals() and df is not None and len(df.columns) == 1:
             st.warning("⚠️ Unstructured Single-Column Data Detected!")
             
             if st.button("⚡ Convert Unstructured File to Structured CSV"):
