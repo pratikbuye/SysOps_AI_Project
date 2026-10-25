@@ -1,0 +1,8 @@
+====================================================================
+SMART SYSOPS & AI DOCUMENT ANALYZER - LIVE DASHBOARD
+====================================================================
+
+Streamlit Live Project Link : https://<your-app-name>.streamlit.app/
+GitHub Repository           : https://github.com/pratikbuye/SysOps_AI_Project
+
+====================================================================
