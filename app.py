@@ -621,68 +621,64 @@ INSTRUCTIONS:
 # ------------------------------------------
 # TAB 3: UNIFIED AI SYSOPS ENGINE
 # ------------------------------------------
+
+import streamlit as st
+
+# Check karo ki Groq API key available hai ya nahi
+use_groq = "GROQ_API_KEY" in st.secrets
+
 with tab3:
     st.subheader("🤖 Unified AI SysOps & Command Assistant")
-    st.caption("Local LLM (Qwen2) & Groq Cloud API Powered Chat Assistant")
+    st.caption("ChatGPT Style General Assistant (Groq Cloud & Local Ollama)")
 
-    # Chat history initialize karo agar nahi hai
+    # Chat history initialize karo
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = [
-            {"role": "assistant", "content": "👋 Hello! I am your **SysOps AI Assistant**. Ask me anything about RAM/CPU optimization, SQL tuning, or log debugging."}
+            {"role": "system", "content": "You are a helpful general-purpose AI assistant, just like ChatGPT. You can answer any questions across all topics, help with coding, writing, debugging, and general problem-solving."},
+            {"role": "assistant", "content": "👋 Hello! I am your AI Assistant. Ask me anything—coding, debugging, general questions, or system tasks!"}
         ]
 
-    # Purani chat history screen par dikhao
     for msg in st.session_state.chat_history:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+        if msg["role"] != "system":
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
 
-    # User ka Chat Input Box
-    if prompt := st.chat_input("Ask SysOps Agent (e.g. 'How to lower RAM load?', 'SQL query tuning')..."):
-        # User message add karo
+    if prompt := st.chat_input("Ask me anything (e.g., Python code, general questions)..."):
         st.session_state.chat_history.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # AI Response Generation
         with st.chat_message("assistant"):
-            with st.spinner("SysOps Agent thinking..."):
-                query_lower = prompt.lower()
-                
-                # Live System Context aware logic
-                ram_now = psutil.virtual_memory().percent
-                cpu_now = psutil.cpu_percent()
-
-                if "ram" in query_lower or "memory" in query_lower:
-                    response = f"""### 🛠️ **SysOps RAM Diagnostic**
-Current System RAM Usage: **{ram_now}%**
-
-**Recommended Actions:**
-1. Use **'Flush RAM Cache'** in the left Control Panel.
-2. Check high-memory background Python workers.
-3. Command to inspect top memory processes:
-   ```bash
-   ps aux --sort=-%mem | head -n 5
-   ```"""
-                elif "sql" in query_lower or "database" in query_lower:
-                    response = """### 🗄️ **Database Performance Optimization**
-* **Indexes:** Ensure foreign key columns in SQLite/PostgreSQL are indexed.
-* **Query Design:** Replace `SELECT *` with specific columns.
-* **Connection Pooling:** Reuse active database connections to prevent memory spikes."""
-                elif "regex" in query_lower or "log" in query_lower:
-                    response = """### 🔍 **Log Parsing Regex Solution**
-Use this standard pattern for extracting IPv4 addresses from raw logs:
-```python
-import re
-ip_pattern = r'\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b'
-found_ips = re.findall(ip_pattern, log_text)
-```"""
-                else:
-                    response = f"""### 🤖 **SysOps Agent Response**
-Analyzed query: *"{prompt}"*
-
-* **System Parameters:** CPU Load: {cpu_now}% | RAM Usage: {ram_now}%
-* **Engine Pipeline:** Executed via Groq Cloud API (Speed Boost) / Local Ollama (qwen2:1.5b) Fallback.
-* **Status:** All diagnostic checks normal."""
+            with st.spinner("AI is thinking..."):
+                try:
+                    if use_groq:
+                        # --- ONLINE MODE (Groq API with openai/gpt-oss-120b) ---
+                        from groq import Groq
+                        client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+                        
+                        completion = client.chat.completions.create(
+                            model="openai/gpt-oss-120b",
+                            messages=st.session_state.chat_history,
+                            temperature=0.7,
+                            max_tokens=2048,
+                        )
+                        response = completion.choices[0].message.content
+                    else:
+                        # --- LOCAL MODE (Ollama with qwen2:1.5b) ---
+                        import requests
+                        
+                        res = requests.post(
+                            "http://localhost:11434/api/chat",
+                            json={"model": "qwen2:1.5b", "messages": st.session_state.chat_history, "stream": False},
+                            timeout=60
+                        )
+                        if res.status_code == 200:
+                            response = res.json().get("message", {}).get("content", "").strip()
+                        else:
+                            response = f"⚠️ Ollama error: Status code {res.status_code}"
+                        
+                except Exception as e:
+                    response = f"⚠️ Error communicating with AI model: {str(e)}"
 
                 st.markdown(response)
                 st.session_state.chat_history.append({"role": "assistant", "content": response})
